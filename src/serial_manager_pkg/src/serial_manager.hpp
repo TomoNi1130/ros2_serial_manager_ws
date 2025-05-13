@@ -20,9 +20,12 @@ class SerialPort {
  public:
   SerialPort(boost::asio::io_context& io, const std::string& port_name, rclcpp::Publisher<interface_pkg::msg::SerialMsg>::SharedPtr publisher_, const rclcpp::Logger& logger);
   ~SerialPort();
+  void send_serial(const std::string& send_str);
+  int get_id();
 
  private:
   void serial_callback(const boost::system::error_code& ec, std::size_t bytes_transferred);
+
   template <typename T>
   std::vector<T> split_strring(const std::string& target_string) {  //: で分ける
     std::vector<T> result;
@@ -57,9 +60,10 @@ class SerialPort {
   rclcpp::Publisher<interface_pkg::msg::SerialMsg>::SharedPtr publisher_;
   rclcpp::Logger logger;
 
-  std::string red = "\033[31m";    // 赤色
-  std::string green = "\033[32m";  // 緑
-  std::string reset = "\033[0m";   // リセット
+  std::string red = "\033[31m";     // 赤色
+  std::string green = "\033[32m";   // 緑
+  std::string yellow = "\033[33m";  // 黄色
+  std::string reset = "\033[0m";    // リセット
 };
 
 class SerialManager : public rclcpp::Node {

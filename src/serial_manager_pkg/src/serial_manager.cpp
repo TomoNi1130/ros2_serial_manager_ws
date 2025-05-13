@@ -10,6 +10,8 @@ SerialPort::SerialPort(boost::asio::io_context& io, const std::string& port_name
   serial.async_read_some(boost::asio::buffer(buffer, 1), [this](const boost::system::error_code& error, size_t bytes_transferred) { this->serial_callback(error, bytes_transferred); });
 }
 
+int SerialPort::get_id() { return id; }
+
 void SerialPort::serial_callback(const boost::system::error_code& ec, std::size_t bytes_transferred) {
   if (!ec) {
     receive_msg += buffer[0];
@@ -20,7 +22,7 @@ void SerialPort::serial_callback(const boost::system::error_code& ec, std::size_
         id = std::stoi(receive_msg);
         RCLCPP_INFO(logger, "port:%s's id set [%d]", port_name.c_str(), id);
       } else if (id == 0) {
-        RCLCPP_WARN(logger, "[%swarm IDの未指定%s] ポート%s %s %sのidが指定されていません", red.c_str(), reset.c_str(), red.c_str(), port_name.c_str(), reset.c_str());
+        RCLCPP_INFO(logger, "[%swarm%s IDの未指定] ポート%s %s %sのidが指定されていません", red.c_str(), reset.c_str(), yellow.c_str(), port_name.c_str(), reset.c_str());
       } else if (receive_msg.substr(0, 5) == "[inf]") {
         receive_msg.erase(0, 5);
         size_t num_start = receive_msg.find("n");
@@ -59,10 +61,14 @@ void SerialPort::serial_callback(const boost::system::error_code& ec, std::size_
   serial.async_read_some(boost::asio::buffer(buffer, 1), [this](const boost::system::error_code& error, size_t bytes_transferred) { this->serial_callback(error, bytes_transferred); });
 }
 
+void SerialPort::send_serial(const std::string& send_str) {
+  boost::asio::async_write(serial, boost::asio::buffer(send_str), [this](boost::system::error_code ec, std::size_t bytes_transferred) {});
+}
+
 SerialPort::~SerialPort() {}
 
 SerialManager::SerialManager(const rclcpp::NodeOptions& options) : rclcpp::Node("Serial_manager", options), io() {
-  subscription_ = this->create_subscription<interface_pkg::msg::SerialMsg>("serial_msg", 10, std::bind(&SerialManager::topic_callback, this, _1));
+  subscription_ = this->create_subscription<interface_pkg::msg::SerialMsg>("send_to_micro", 10, std::bind(&SerialManager::topic_callback, this, _1));
   publisher_ = this->create_publisher<interface_pkg::msg::SerialMsg>("micro_data", 10);
   port_names = find_serial_port();
   if (!port_names.empty()) {
@@ -97,7 +103,29 @@ std::vector<std::string> SerialManager::find_serial_port() {
   return device_paths;
 }
 
-void SerialManager::topic_callback(const interface_pkg::msg::SerialMsg& msg) {}
+void SerialManager::topic_callback(const interface_pkg::msg::SerialMsg& msg) {
+  std::string send_msg;
+  send_msg += "n";
+  for (double number : msg.numbers)
+    send_msg += ":" + std::to_string(number);
+  send_msg += "b";
+  for (bool flag : msg.flags)
+    if (flag)
+      send_msg += ":1";
+    else
+      send_msg += ":0";
+  send_msg += "s";
+  for (std::string str : msg.msg_str)
+    send_msg += ":" + str;
+  send_msg += "\n";
+  for (const auto& serial_port_ptr : serial_ports) {
+    SerialPort& serial_port = *serial_port_ptr;
+    if (serial_port.get_id() == msg.msg_id) {
+      RCLCPP_INFO(this->get_logger(), "send_msg:%s id:%d", send_msg.c_str(), msg.msg_id);
+      // serial_port.send_serial(send_msg);
+    }
+  }
+}
 
 }  // namespace serial_manager
 
